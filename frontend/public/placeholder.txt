@@ -1,0 +1,2 @@
+Place your logo at public/logo.png and favicon at public/favicon.ico
+
