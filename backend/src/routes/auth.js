@@ -51,7 +51,15 @@ router.post(
       if (!isValid) return res.status(401).json({ message: 'Invalid credentials' });
 
       const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || 'dev', { expiresIn: '7d' });
-      return res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
+      // Get full user data including profile_photo (use same query but select profile_photo)
+      const [userData] = await pool.query('SELECT id, name, email, profile_photo FROM users WHERE id = ?', [user.id]);
+      const fullUser = userData[0] || { id: user.id, name: user.name, email: user.email, profile_photo: null };
+      // Convert profile_photo to full URL if it exists
+      if (fullUser.profile_photo && !fullUser.profile_photo.startsWith('http')) {
+        const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+        fullUser.profile_photo = `${baseUrl}${fullUser.profile_photo.startsWith('/') ? '' : '/'}${fullUser.profile_photo}`;
+      }
+      return res.json({ token, user: fullUser });
     } catch (err) {
       next(err);
     }

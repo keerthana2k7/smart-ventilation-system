@@ -18,6 +18,8 @@ import fansRouter from './routes/fans.js';
 import analyticsRouter from './routes/analytics.js';
 import profileRouter from './routes/profile.js';
 import storeRouter from './routes/store.js';
+import iotRouter from './routes/iot.js';
+import webhookRouter from './routes/webhook.js';
 import { fetchGasAndMotor } from './services/arduinoCloud.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -46,6 +48,8 @@ app.use('/api/fans', fansRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/store', storeRouter);
+app.use('/api/iot', iotRouter);
+app.use('/api/webhook', webhookRouter);
 
 app.use(errorHandler);
 

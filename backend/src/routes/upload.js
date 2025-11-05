@@ -29,13 +29,17 @@ router.post('/', requireAuth, upload.single('file'), async (req, res, next) => {
     const file = req.file;
     if (!file) return res.status(400).json({ message: 'No file uploaded' });
     const pool = await getDbPool();
+    const filePath = `/uploads/${file.filename}`;
     await pool.query(
       `INSERT INTO uploads (filename, path, mimetype, size) VALUES (?, ?, ?, ?)`,
-      [file.filename, `/uploads/${file.filename}`, file.mimetype, file.size]
+      [file.filename, filePath, file.mimetype, file.size]
     );
+    // Return full URL
+    const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const fullUrl = `${baseUrl}${filePath}`;
     return res.status(201).json({
       message: 'Uploaded',
-      file: { filename: file.filename, url: `/uploads/${file.filename}` }
+      file: { filename: file.filename, url: fullUrl, path: filePath }
     });
   } catch (err) {
     next(err);

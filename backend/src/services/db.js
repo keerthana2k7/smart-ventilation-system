@@ -87,6 +87,33 @@ export async function initializeDatabase() {
     ) ENGINE=InnoDB;
   `);
 
+  // Fan readings table (for webhook data with motor_state)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS fan_readings (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      fan_id INT NOT NULL,
+      gas_level DECIMAL(10,2) NOT NULL,
+      motor_state TINYINT(1) DEFAULT 0,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (fan_id) REFERENCES fans(id) ON DELETE CASCADE,
+      INDEX idx_fan_timestamp (fan_id, timestamp)
+    ) ENGINE=InnoDB;
+  `);
+
+  // Fan runtime log table (for tracking runtime events)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS fan_runtime_log (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      fan_id INT NOT NULL,
+      gas_level DECIMAL(10,2) NOT NULL,
+      motor_state TINYINT(1) DEFAULT 0,
+      runtime_minutes DECIMAL(10,2) DEFAULT 0,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (fan_id) REFERENCES fans(id) ON DELETE CASCADE,
+      INDEX idx_fan_timestamp (fan_id, timestamp)
+    ) ENGINE=InnoDB;
+  `);
+
   // Products
   await pool.query(`
     CREATE TABLE IF NOT EXISTS products (

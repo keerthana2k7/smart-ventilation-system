@@ -51,15 +51,34 @@ export default function Profile() {
         }
       }
       
-      await api.post('/api/profile/update', { name: form.name, email: form.email, profile_photo: photoUrl })
+      // Prepare update data
+      const updateData = { name: form.name, email: form.email }
+      // Always preserve photo: send new uploaded URL, or existing URL, or existing user photo
+      if (photoUrl && !photoUrl.startsWith('blob:')) {
+        // Valid photo URL (either newly uploaded or existing)
+        updateData.photo = photoUrl
+      } else if (!photoUrl && user?.profile_photo) {
+        // No new photo selected, preserve existing one
+        updateData.photo = user.profile_photo
+      }
+      // If photoUrl is still a blob, upload must have failed - don't send it
+      
+      const response = await api.post('/api/profile/update', updateData)
+      // Update user state with returned user data if available
+      if (response.data.user) {
+        auth.setUser?.(response.data.user)
+        localStorage.setItem('user', JSON.stringify(response.data.user))
+      }
       await refresh()
-      // Update form state with new photo URL
-      setForm(f => ({ ...f, photo: photoUrl }))
+      // Update form state with new photo URL from response
+      if (response.data.user?.profile_photo) {
+        setForm(f => ({ ...f, photo: response.data.user.profile_photo }))
+      }
       setEditing(false)
       alert('Profile updated successfully')
     }catch(err){ 
       console.error(err)
-      alert('Failed to update profile') 
+      alert('Failed to update profile: ' + (err.response?.data?.message || err.message))
     }
   }
 
