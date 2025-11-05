@@ -15,6 +15,19 @@ export default function Profile() {
     photo: user?.profile_photo || null
   })
 
+  // Sync form when user changes
+  React.useEffect(() => {
+    if (user) {
+      setForm({
+        name: user.name || 'User',
+        email: user.email || 'user@example.com',
+        phone: user.phone || '',
+        role: 'User',
+        photo: user.profile_photo || null
+      })
+    }
+  }, [user])
+
   function onUpload(e){
     const file = e.target.files?.[0]
     if(file){ setForm(f=>({ ...f, photo: URL.createObjectURL(file) })) }
@@ -23,11 +36,31 @@ export default function Profile() {
   async function save(e){
     e.preventDefault()
     try{
-      await api.post('/api/profile/update', { name: form.name, email: form.email, profile_photo: form.photo })
+      // Handle file upload if a new photo was selected
+      let photoUrl = form.photo
+      if (form.photo && form.photo.startsWith('blob:')) {
+        // User selected a new file, need to upload it
+        const formData = new FormData()
+        const fileInput = document.querySelector('input[type="file"]')
+        if (fileInput?.files?.[0]) {
+          formData.append('file', fileInput.files[0])
+          const uploadRes = await api.post('/api/uploads', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          })
+          photoUrl = uploadRes.data.file.url || photoUrl
+        }
+      }
+      
+      await api.post('/api/profile/update', { name: form.name, email: form.email, profile_photo: photoUrl })
       await refresh()
+      // Update form state with new photo URL
+      setForm(f => ({ ...f, photo: photoUrl }))
       setEditing(false)
       alert('Profile updated successfully')
-    }catch(err){ alert('Failed to update profile') }
+    }catch(err){ 
+      console.error(err)
+      alert('Failed to update profile') 
+    }
   }
 
   async function refresh(){

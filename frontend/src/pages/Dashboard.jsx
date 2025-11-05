@@ -37,7 +37,7 @@ function FanCard({ fan, onClick, gasLevel = 0, motorState = false, threshold = 2
         </div>
         <div className={`text-sm font-medium ${isOn ? 'text-red-400' : 'text-gray-400'}`}>{isOn ? 'ON' : 'OFF'}</div>
       </div>
-      <div className="mt-2 text-sm text-gray-300">Runtime today: {fan.runtimeToday} min</div>
+      <div className="mt-2 text-sm text-gray-300">Runtime today: {fan.runtimeToday || 0} min</div>
       <div className="mt-1 text-xs text-gray-400">Gas: <span className={over? 'text-red-400': 'text-gray-300'}>{Math.round(gasLevel)}</span></div>
     </motion.button>
   )
@@ -112,11 +112,60 @@ export default function Dashboard() {
     } catch { alert('Failed to register fan') }
   }
 
+  const [showDownloadMenu, setShowDownloadMenu] = React.useState(false)
+
+  // Close download menu when clicking outside
+  React.useEffect(() => {
+    if (!showDownloadMenu) return
+    function handleClickOutside(event) {
+      const menu = document.querySelector('.download-menu-container')
+      if (menu && !menu.contains(event.target)) {
+        setShowDownloadMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showDownloadMenu])
+
+  async function downloadReport(format) {
+    try {
+      const response = await api.get(`/api/fans/report?format=${format}`, {
+        responseType: 'blob'
+      })
+      const blob = new Blob([response.data], { 
+        type: format === 'pdf' ? 'application/pdf' : 'text/csv' 
+      })
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = `fan_report_${Date.now()}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(downloadUrl)
+      document.body.removeChild(a)
+      setShowDownloadMenu(false)
+    } catch (err) {
+      console.error('Download error:', err)
+      alert('Failed to download report: ' + (err.response?.data?.message || err.message || 'Unknown error'))
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-red-400">Dashboard</h1>
-        <button className="btn" onClick={()=>setShowAdd(true)}>Register Fan</button>
+        <div className="flex items-center gap-3">
+          <div className="relative download-menu-container">
+            <button className="btn" onClick={()=>setShowDownloadMenu(!showDownloadMenu)}>Download Report</button>
+            {showDownloadMenu && (
+              <div className="absolute right-0 mt-2 w-48 rounded-lg bg-gray-900 border border-red-800/40 shadow-xl z-10">
+                <button onClick={()=>downloadReport('csv')} className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:text-red-300 hover:bg-gray-800 rounded-t-lg">Download CSV</button>
+                <button onClick={()=>downloadReport('pdf')} className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:text-red-300 hover:bg-gray-800 rounded-b-lg">Download PDF</button>
+              </div>
+            )}
+          </div>
+          <button className="btn" onClick={()=>setShowAdd(true)}>Register Fan</button>
+        </div>
       </div>
 
       {fans.length === 0 && (
@@ -128,7 +177,7 @@ export default function Dashboard() {
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-6">
         {fans.map(f => (
-          <FanCard key={f.id} fan={{...f, runtimeToday: Math.round((f.runtime_hours||0)*60)}} gasLevel={status.gasLevel} motorState={status.motorState} threshold={GAS_THRESHOLD} onClick={() => setSelected(f)} />
+          <FanCard key={f.id} fan={{...f, runtimeToday: Math.round((f.runtime_today||0)*60)}} gasLevel={status.gasLevel} motorState={status.motorState} threshold={GAS_THRESHOLD} onClick={() => setSelected(f)} />
         ))}
       </div>
 

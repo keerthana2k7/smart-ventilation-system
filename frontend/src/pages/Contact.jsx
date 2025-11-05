@@ -24,13 +24,25 @@ export default function Contact(){
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h2 className="text-3xl font-bold text-red-400 mb-6">Contact Us</h2>
-      <form onSubmit={onSubmit} className="space-y-3 p-5 rounded-xl bg-gray-900/60 border border-red-800/40">
+      <motion.h2 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-4xl font-bold text-red-400 mb-6 text-center"
+      >
+        Contact Us
+      </motion.h2>
+      <motion.form 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        onSubmit={onSubmit} 
+        className="space-y-3 p-5 rounded-xl bg-gray-900/60 border border-red-800/40"
+      >
         <input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" className="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 focus:border-red-600 outline-none" />
         <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email" className="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 focus:border-red-600 outline-none" />
         <textarea value={message} onChange={e=>setMessage(e.target.value)} placeholder="Message" className="w-full h-32 px-3 py-2 rounded bg-gray-900 border border-gray-700 focus:border-red-600 outline-none" />
         <button className="btn">Send</button>
-      </form>
+      </motion.form>
       <AnimatePresence>
         {sent && (
           <motion.div initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-8}} className="mt-4 text-green-400">Thank you! We received your message.</motion.div>

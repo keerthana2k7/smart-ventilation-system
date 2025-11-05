@@ -12,6 +12,7 @@ import Profile from './pages/Profile.jsx'
 import Login from './pages/Login.jsx'
 import SignUp from './pages/SignUp.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
+import PageTransition from './components/PageTransition.jsx'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
 
 function Navbar() {
@@ -121,18 +122,27 @@ export default function App() {
       <AuthProvider>
         <div className="min-h-screen flex flex-col">
           <Navbar />
-          <motion.main initial={{opacity:0}} animate={{opacity:1}} className="flex-1">
-            {React.useEffect(()=>{ AOS.init({ duration: 600, once: true }) }, [])}
+          <motion.main 
+            initial={{opacity:0}} 
+            animate={{opacity:1}} 
+            transition={{ duration: 0.5 }}
+            className="flex-1"
+          >
+            {React.useEffect(()=>{ 
+              if (typeof window !== 'undefined' && window.AOS) {
+                AOS.init({ duration: 600, once: true })
+              }
+            }, [])}
             <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/store" element={<Store />} />
-              <Route path="/about" element={<About />} />
-              <Route path="/how-it-works" element={<HowItWorks />} />
-              <Route path="/contact" element={<Contact />} />
-              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<SignUp />} />
+              <Route path="/" element={<PageTransition><Home /></PageTransition>} />
+              <Route path="/dashboard" element={<ProtectedRoute><PageTransition><Dashboard /></PageTransition></ProtectedRoute>} />
+              <Route path="/store" element={<PageTransition><Store /></PageTransition>} />
+              <Route path="/about" element={<PageTransition><About /></PageTransition>} />
+              <Route path="/how-it-works" element={<PageTransition><HowItWorks /></PageTransition>} />
+              <Route path="/contact" element={<PageTransition><Contact /></PageTransition>} />
+              <Route path="/profile" element={<ProtectedRoute><PageTransition><Profile /></PageTransition></ProtectedRoute>} />
+              <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+              <Route path="/signup" element={<PageTransition><SignUp /></PageTransition>} />
             </Routes>
           </motion.main>
           <Footer />
