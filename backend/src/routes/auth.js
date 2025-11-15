@@ -56,7 +56,7 @@ router.post(
       const fullUser = userData[0] || { id: user.id, name: user.name, email: user.email, profile_photo: null };
       // Convert profile_photo to full URL if it exists
       if (fullUser.profile_photo && !fullUser.profile_photo.startsWith('http')) {
-        const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+        const baseUrl = process.env.PUBLIC_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
         fullUser.profile_photo = `${baseUrl}${fullUser.profile_photo.startsWith('/') ? '' : '/'}${fullUser.profile_photo}`;
       }
       return res.json({ token, user: fullUser });

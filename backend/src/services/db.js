@@ -60,14 +60,17 @@ export async function initializeDatabase() {
       user_id INT NOT NULL,
       name VARCHAR(100) NOT NULL,
       location VARCHAR(255) NOT NULL,
-      device_id VARCHAR(128) NULL,
+      device_id VARCHAR(128) NULL UNIQUE,
       thing_id VARCHAR(128) NULL,
       status ENUM('ON','OFF') DEFAULT 'OFF',
       runtime_hours DECIMAL(10,2) DEFAULT 0,
       runtime_today DECIMAL(10,2) DEFAULT 0,
+      runtime_total DECIMAL(10,2) DEFAULT 0,
       last_on_at DATETIME NULL,
+      last_updated DATETIME NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_user_device (user_id, device_id)
     ) ENGINE=InnoDB;
   `);
 
@@ -75,6 +78,15 @@ export async function initializeDatabase() {
   await pool.query("ALTER TABLE fans ADD COLUMN IF NOT EXISTS device_id VARCHAR(128) NULL");
   await pool.query("ALTER TABLE fans ADD COLUMN IF NOT EXISTS thing_id VARCHAR(128) NULL");
   await pool.query("ALTER TABLE fans ADD COLUMN IF NOT EXISTS runtime_today DECIMAL(10,2) DEFAULT 0");
+  await pool.query("ALTER TABLE fans ADD COLUMN IF NOT EXISTS runtime_total DECIMAL(10,2) DEFAULT 0");
+  await pool.query("ALTER TABLE fans ADD COLUMN IF NOT EXISTS last_updated DATETIME NULL");
+  
+  // Add unique constraint on device_id per user if not exists
+  try {
+    await pool.query("ALTER TABLE fans ADD UNIQUE KEY IF NOT EXISTS unique_user_device (user_id, device_id)");
+  } catch (e) {
+    // Ignore if constraint already exists
+  }
 
   // Fan data table
   await pool.query(`
@@ -93,10 +105,10 @@ export async function initializeDatabase() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       fan_id INT NOT NULL,
       gas_level DECIMAL(10,2) NOT NULL,
-      motor_state TINYINT(1) DEFAULT 0,
-      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      motor_state BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (fan_id) REFERENCES fans(id) ON DELETE CASCADE,
-      INDEX idx_fan_timestamp (fan_id, timestamp)
+      INDEX idx_fan_timestamp (fan_id, created_at)
     ) ENGINE=InnoDB;
   `);
 

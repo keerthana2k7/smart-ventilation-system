@@ -35,7 +35,7 @@ router.post('/', requireAuth, upload.single('file'), async (req, res, next) => {
       [file.filename, filePath, file.mimetype, file.size]
     );
     // Return full URL
-    const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const baseUrl = process.env.PUBLIC_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
     const fullUrl = `${baseUrl}${filePath}`;
     return res.status(201).json({
       message: 'Uploaded',

@@ -5,76 +5,161 @@ const router = Router();
 
 // Arduino IoT Cloud Webhook Handler
 router.post('/webhook', async (req, res, next) => {
+  const io = req.app.io; // Get socket.io instance from app
+  const pool = await getDbPool();
+  const connection = await pool.getConnection();
+  
   try {
     const payload = req.body;
     
     // Validate payload structure
-    if (!payload || !payload.values || !Array.isArray(payload.values)) {
-      return res.status(400).json({ message: 'Invalid payload structure' });
+    if (!payload || typeof payload !== 'object') {
+      return res.status(200).json({ success: true, message: 'Invalid payload, ignored' });
     }
 
     const deviceId = payload.device_id;
-    if (!deviceId) {
-      // Silently ignore if device_id is missing
-      return res.status(200).json({ ok: true, message: 'No device_id, ignored' });
+    if (!deviceId || typeof deviceId !== 'string') {
+      // Return 200 OK for Arduino Cloud - don't fail webhook
+      return res.status(200).json({ success: true, message: 'No device_id, ignored' });
     }
 
-    const pool = await getDbPool();
-    
+    // Validate values array
+    if (!payload.values || !Array.isArray(payload.values)) {
+      return res.status(200).json({ success: true, message: 'Invalid values array, ignored' });
+    }
+
+    // Start transaction
+    await connection.beginTransaction();
+
     // Find fan by device_id
-    const [fans] = await pool.query('SELECT id FROM fans WHERE device_id = ?', [deviceId]);
+    const [fans] = await connection.query(
+      'SELECT id, status, last_on_at FROM fans WHERE device_id = ?',
+      [deviceId]
+    );
     
     if (fans.length === 0) {
-      // Silently ignore if device not found
-      return res.status(200).json({ ok: true, message: 'Device not found, ignored' });
+      // Return 200 OK even if device not found (for Arduino Cloud)
+      await connection.rollback();
+      return res.status(200).json({ success: true, message: 'Device not found, ignored' });
     }
 
-    const fanId = fans[0].id;
+    const fan = fans[0];
+    const fanId = fan.id;
     let gasLevel = null;
     let motorState = false;
 
     // Extract values from payload
     for (const value of payload.values) {
-      if (value.name === 'gasLevel' && value.value !== undefined) {
-        gasLevel = parseFloat(value.value);
+      if (value && typeof value === 'object') {
+        if (value.name === 'gasLevel' && value.value !== undefined) {
+          gasLevel = parseFloat(value.value);
+        }
+        if (value.name === 'motorState' || value.name === 'motor_state') {
+          motorState = value.value === true || value.value === 'true' || value.value === 1 || value.value === '1';
+        }
       }
-      if (value.name === 'motorState' || value.name === 'motor_state') {
-        motorState = value.value === true || value.value === 'true' || value.value === 1 || value.value === '1';
-      }
+    }
+
+    if (gasLevel === null || isNaN(gasLevel)) {
+      await connection.rollback();
+      return res.status(200).json({ success: true, message: 'Invalid gasLevel, ignored' });
+    }
+
+    const currentStatus = fan.status || 'OFF';
+    const lastOnAt = fan.last_on_at;
+    let runtimeMinutes = 0;
+    let runtimeHoursToAdd = 0;
+
+    // Calculate runtime if motor is turning OFF
+    if (!motorState && currentStatus === 'ON' && lastOnAt) {
+      const [runtimeResult] = await connection.query(
+        'SELECT TIMESTAMPDIFF(MINUTE, ?, NOW()) as minutes',
+        [lastOnAt]
+      );
+      runtimeMinutes = runtimeResult[0]?.minutes || 0;
+      runtimeHoursToAdd = runtimeMinutes / 60;
     }
 
     // Insert into fan_readings table
-    if (gasLevel !== null) {
-      await pool.query(
-        'INSERT INTO fan_readings (fan_id, gas_level, motor_state, timestamp) VALUES (?, ?, ?, NOW())',
-        [fanId, gasLevel, motorState ? 1 : 0]
-      );
+    await connection.query(
+      'INSERT INTO fan_readings (fan_id, gas_level, motor_state, created_at) VALUES (?, ?, ?, NOW())',
+      [fanId, gasLevel, motorState ? 1 : 0]
+    );
 
-      // Update runtime if motor_state is true
-      if (motorState) {
-        // If turning ON, set last_on_at if not already ON
-        await pool.query(
-          "UPDATE fans SET status='ON', last_on_at = IF(status='ON', last_on_at, NOW()) WHERE id = ?",
+    // Update fan table
+    if (motorState) {
+      // Motor turning ON
+      if (currentStatus !== 'ON') {
+        // Fan was OFF, now turning ON
+        await connection.query(
+          "UPDATE fans SET status='ON', last_on_at=NOW(), last_updated=NOW() WHERE id = ?",
           [fanId]
         );
       } else {
-        // If turning OFF, calculate and add runtime
-        await pool.query(`
+        // Fan already ON, just update timestamp
+        await connection.query(
+          "UPDATE fans SET last_updated=NOW() WHERE id = ?",
+          [fanId]
+        );
+      }
+    } else {
+      // Motor turning OFF
+      if (currentStatus === 'ON' && runtimeHoursToAdd > 0) {
+        // Calculate runtime and update
+        await connection.query(`
           UPDATE fans SET 
-            runtime_hours = runtime_hours + IF(status='ON' AND last_on_at IS NOT NULL, TIMESTAMPDIFF(MINUTE, last_on_at, NOW())/60, 0),
-            runtime_today = runtime_today + IF(status='ON' AND last_on_at IS NOT NULL AND DATE(last_on_at) = CURDATE(), TIMESTAMPDIFF(MINUTE, last_on_at, NOW())/60, 0),
+            runtime_hours = runtime_hours + ?,
+            runtime_total = runtime_total + ?,
+            runtime_today = runtime_today + IF(DATE(?) = CURDATE(), ?, 0),
             status='OFF',
-            last_on_at=NULL
+            last_on_at=NULL,
+            last_updated=NOW()
           WHERE id = ?
-        `, [fanId]);
+        `, [runtimeHoursToAdd, runtimeHoursToAdd, lastOnAt, runtimeHoursToAdd, fanId]);
+      } else {
+        // Fan was already OFF
+        await connection.query(
+          "UPDATE fans SET status='OFF', last_updated=NOW() WHERE id = ?",
+          [fanId]
+        );
       }
     }
 
-    return res.status(200).json({ ok: true, fan_id: fanId, gas_level: gasLevel, motor_state: motorState });
+    // Append to fan_runtime_log table
+    await connection.query(
+      'INSERT INTO fan_runtime_log (fan_id, gas_level, motor_state, runtime_minutes, timestamp) VALUES (?, ?, ?, ?, NOW())',
+      [fanId, gasLevel, motorState ? 1 : 0, runtimeMinutes]
+    );
+
+    // Commit transaction
+    await connection.commit();
+
+    // Emit socket event for real-time updates
+    if (io) {
+      io.emit('fan-update', {
+        fan_id: fanId,
+        device_id: deviceId,
+        gas_level: gasLevel,
+        motor_state: motorState,
+        status: motorState ? 'ON' : 'OFF',
+        last_updated: new Date().toISOString()
+      });
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      fan_id: fanId, 
+      gas_level: gasLevel, 
+      motor_state: motorState
+    });
   } catch (err) {
-    // Log error but don't expose details to webhook caller
+    // Rollback on error
+    await connection.rollback();
     console.error('Webhook error:', err);
-    return res.status(500).json({ ok: false, message: 'Internal server error' });
+    // Return 200 OK even on error to satisfy Arduino Cloud
+    return res.status(200).json({ success: false, message: 'Internal server error' });
+  } finally {
+    connection.release();
   }
 });
 

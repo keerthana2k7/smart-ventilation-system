@@ -13,7 +13,7 @@ router.get('/me', requireAuth, async (req, res, next) => {
     const user = rows[0];
     // Convert profile_photo to full URL if it exists
     if (user.profile_photo && !user.profile_photo.startsWith('http')) {
-      const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+      const baseUrl = process.env.PUBLIC_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
       user.profile_photo = `${baseUrl}${user.profile_photo.startsWith('/') ? '' : '/'}${user.profile_photo}`;
     }
     return res.json({ user });
@@ -45,7 +45,7 @@ router.post('/update', requireAuth, [
     const [updated] = await pool.query('SELECT id, name, email, profile_photo FROM users WHERE id = ?', [req.user.id]);
     const user = updated[0];
     if (user.profile_photo && !user.profile_photo.startsWith('http')) {
-      const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+      const baseUrl = process.env.PUBLIC_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
       user.profile_photo = `${baseUrl}${user.profile_photo.startsWith('/') ? '' : '/'}${user.profile_photo}`;
     }
     return res.json({ ok: true, user });
