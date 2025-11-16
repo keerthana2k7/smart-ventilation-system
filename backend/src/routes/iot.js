@@ -33,7 +33,7 @@ router.post('/webhook', async (req, res, next) => {
 
     // Find fan by device_id
     const [fans] = await connection.query(
-      'SELECT id, status, last_on_at FROM fans WHERE device_id = ?',
+      'SELECT id, status, last_on_at, runtime_total FROM fans WHERE device_id = ?',
       [deviceId]
     );
     
@@ -86,20 +86,23 @@ router.post('/webhook', async (req, res, next) => {
       [fanId, gasLevel, motorState ? 1 : 0]
     );
 
-    // Update fan table
+    // Determine new status
+    const newStatus = motorState ? 'ON' : 'OFF';
+    
+    // Update fan table with status, runtime, and gas level
     if (motorState) {
       // Motor turning ON
       if (currentStatus !== 'ON') {
         // Fan was OFF, now turning ON
         await connection.query(
-          "UPDATE fans SET status='ON', last_on_at=NOW(), last_updated=NOW() WHERE id = ?",
-          [fanId]
+          "UPDATE fans SET status='ON', last_on_at=NOW(), last_updated=NOW(), last_gas_level=? WHERE id = ?",
+          [gasLevel, fanId]
         );
       } else {
-        // Fan already ON, just update timestamp
+        // Fan already ON, just update timestamp and gas level
         await connection.query(
-          "UPDATE fans SET last_updated=NOW() WHERE id = ?",
-          [fanId]
+          "UPDATE fans SET last_updated=NOW(), last_gas_level=? WHERE id = ?",
+          [gasLevel, fanId]
         );
       }
     } else {
@@ -108,19 +111,19 @@ router.post('/webhook', async (req, res, next) => {
         // Calculate runtime and update
         await connection.query(`
           UPDATE fans SET 
-            runtime_hours = runtime_hours + ?,
             runtime_total = runtime_total + ?,
             runtime_today = runtime_today + IF(DATE(?) = CURDATE(), ?, 0),
             status='OFF',
             last_on_at=NULL,
-            last_updated=NOW()
+            last_updated=NOW(),
+            last_gas_level=?
           WHERE id = ?
-        `, [runtimeHoursToAdd, runtimeHoursToAdd, lastOnAt, runtimeHoursToAdd, fanId]);
+        `, [runtimeHoursToAdd, lastOnAt, runtimeHoursToAdd, gasLevel, fanId]);
       } else {
         // Fan was already OFF
         await connection.query(
-          "UPDATE fans SET status='OFF', last_updated=NOW() WHERE id = ?",
-          [fanId]
+          "UPDATE fans SET status='OFF', last_updated=NOW(), last_gas_level=? WHERE id = ?",
+          [gasLevel, fanId]
         );
       }
     }
@@ -141,10 +144,13 @@ router.post('/webhook', async (req, res, next) => {
         device_id: deviceId,
         gas_level: gasLevel,
         motor_state: motorState,
-        status: motorState ? 'ON' : 'OFF',
+        status: newStatus,
         last_updated: new Date().toISOString()
       });
     }
+    
+    // Log gas level change
+    console.log(`[Webhook] Fan ${fanId} (${deviceId}): gasLevel=${gasLevel}, motorState=${motorState}, status=${newStatus}`);
 
     return res.status(200).json({ 
       success: true, 

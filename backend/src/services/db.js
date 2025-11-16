@@ -80,6 +80,7 @@ export async function initializeDatabase() {
   await pool.query("ALTER TABLE fans ADD COLUMN IF NOT EXISTS runtime_today DECIMAL(10,2) DEFAULT 0");
   await pool.query("ALTER TABLE fans ADD COLUMN IF NOT EXISTS runtime_total DECIMAL(10,2) DEFAULT 0");
   await pool.query("ALTER TABLE fans ADD COLUMN IF NOT EXISTS last_updated DATETIME NULL");
+  await pool.query("ALTER TABLE fans ADD COLUMN IF NOT EXISTS last_gas_level DECIMAL(10,2) NULL");
   
   // Add unique constraint on device_id per user if not exists
   try {

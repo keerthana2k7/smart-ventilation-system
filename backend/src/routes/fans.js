@@ -15,16 +15,13 @@ router.get('/', requireAuth, async (req, res, next) => {
         f.name,
         f.location,
         f.status,
-        f.runtime_hours as runtime_total,
+        f.runtime_total,
         f.runtime_today,
         f.device_id,
         f.thing_id,
         f.created_at,
         f.last_updated,
-        COALESCE(
-          (SELECT gas_level FROM fan_readings WHERE fan_id = f.id ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as last_gas_level
+        f.last_gas_level
       FROM fans f
       WHERE f.user_id = ?
       ORDER BY f.created_at DESC
@@ -60,8 +57,8 @@ router.post('/', requireAuth, [
     }
     
     const [result] = await pool.query(
-      'INSERT INTO fans (user_id, name, location, device_id, thing_id, status, runtime_hours, runtime_today, runtime_total, created_at, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
-      [req.user.id, name, location, device_id, thing_id || null, 'OFF', 0, 0, 0]
+      'INSERT INTO fans (user_id, name, location, device_id, thing_id, status, runtime_today, runtime_total, created_at, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+      [req.user.id, name, location, device_id, thing_id || null, 'OFF', 0, 0]
     );
     
     return res.status(201).json({ 
@@ -71,11 +68,11 @@ router.post('/', requireAuth, [
       device_id, 
       thing_id, 
       status: 'OFF', 
-      runtime_hours: 0, 
       runtime_today: 0,
       runtime_total: 0,
       created_at: new Date(),
-      last_updated: new Date()
+      last_updated: new Date(),
+      last_gas_level: null
     });
   } catch (err) { 
     // Handle unique constraint violation
@@ -106,10 +103,7 @@ router.get('/report', requireAuth, async (req, res, next) => {
         f.status,
         f.created_at,
         f.last_updated,
-        COALESCE(
-          (SELECT gas_level FROM fan_readings WHERE fan_id = f.id ORDER BY created_at DESC LIMIT 1),
-          NULL
-        ) as last_gas_level
+        f.last_gas_level
       FROM fans f
       WHERE f.user_id = ? 
         AND (f.last_updated IS NULL OR f.last_updated >= DATE_SUB(NOW(), INTERVAL ? DAY))
